@@ -32,7 +32,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:10000/login", {
+      const response = await fetch("https://cvuebackend.onrender.com/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

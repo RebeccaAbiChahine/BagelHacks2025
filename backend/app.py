@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 from database import init_db, debug_print_user, extract_user_cvs
+=======
+# app.py
+from database import init_db, debug_print_user
+>>>>>>> anis3
 import os
 from flask import Flask, request, jsonify, session, send_file
 from flask_cors import CORS
@@ -8,70 +13,69 @@ from flask_session import Session
 from datetime import timedelta
 import bcrypt
 from werkzeug.utils import secure_filename
+<<<<<<< HEAD
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from cohere_utils import rerank_cohere
 from models import User
 from parseFile import parse_pdf_to_text  # Add this import
 import io
+=======
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from models import User  # Your custom User model from models.py
+from cohere_utils import rerank_cohere  # Updated import for other features
+>>>>>>> anis3
 
-# Load environment variables if you want to use them (e.g., SECRET_KEY)
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 
-# First set the MongoDB URI
-app.config["MONGODB_URI"] = os.environ.get('MONGODB_URI')  # Remove the trailing comma!
+# Set configuration from environment
+app.config["MONGODB_URI"] = os.environ.get("MONGODB_URI")
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev")
 
-# Initialize the database connection first
+# Initialize the database connection
 with app.app_context():
     db = init_db()
 
-# Then configure the session with the existing MongoDB connection
+# Configure server-side session using MongoDB
 app.config.update(
-    SECRET_KEY=os.environ.get('SECRET_KEY', 'dev'),
     SESSION_TYPE='mongodb',
     SESSION_MONGODB=db.client,  # Use the client from our db connection
     SESSION_MONGODB_DB='bd',
     SESSION_MONGODB_COLLECT='sessions',
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
+    SESSION_COOKIE_SECURE=True,  # Use True in production (HTTPS)
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(days=7),  # Add this line
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
 )
-
-# Initialize Session after all configs are set
 Session(app)
 
-# Then initialize CORS
+# Initialize CORS (allow credentials) – include production origin
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000"],
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "https://cvue.onrender.com"],
         "supports_credentials": True,
         "allow_headers": ["Content-Type"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     }
 })
 
-
-# Initialize the login manager
+# Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-
-# User loader callback
-
+login_manager.login_view = "/login"
 
 @login_manager.user_loader
 def load_user(user_id):
     user_data = db.users.find_one({"email": user_id})
-    if (user_data):
+    if user_data:
         return User(user_data)
     return None
 
 ############################################
 #              TEST ROUTE
 ############################################
-
-
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({"message": "Backend is running!"})
@@ -79,14 +83,8 @@ def home():
 ############################################
 #              AUTH ROUTES
 ############################################
-
-
 @app.route("/register", methods=["POST"])
 def register():
-    """
-    Register a new user.
-    Body: { "email": "<str>", "password": "<str>", "firstName": "<str>", "lastName": "<str>", "accountType": "<str>" }
-    """
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
@@ -100,14 +98,10 @@ def register():
     if not all([email, password, first_name, last_name, account_type]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    # Check if user already exists
-    existing_user = db.users.find_one({"email": email})
-    if existing_user:
+    if db.users.find_one({"email": email}):
         return jsonify({"error": "User already exists"}), 409
 
-    # Hash the password using bcrypt
     hashed_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
-
     user_data = {
         "email": email,
         "password": hashed_pw,
@@ -115,26 +109,27 @@ def register():
         "last_name": last_name,
         "account_type": account_type
     }
-
-    # Insert into the 'users' collection
     db.users.insert_one(user_data)
+
+    # Create a blank profile for the new user in a separate collection
+    db.profiles.insert_one({
+        "email": email,
+        "job_title": "",
+        "description": "",
+        "skills": [],
+        "experience": []
+    })
 
     return jsonify({"message": "Registration successful"}), 201
 
-
 @app.route("/login", methods=["POST"])
 def login():
-    """
-    Login an existing user.
-    Body: { "email": "<str>", "password": "<str>" }
-    """
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
     email = data.get("email")
     password = data.get("password")
-
     if not email or not password:
         return jsonify({"error": "Missing email or password"}), 400
 
@@ -154,25 +149,13 @@ def login():
             "message": "Login successful",
             "user": session['user']
         }), 200
+
     return jsonify({"error": "Invalid credentials"}), 401
-
-
-@app.route("/check-auth", methods=["GET"])
-def check_auth():
-    # First check session
-    user_data = session.get('user')
-    if user_data:
-        return jsonify(user_data)
-    
-    # If no session, check if user is logged in via flask-login
-    if current_user.is_authenticated:
-        return jsonify(current_user.to_dict())
-    
-    return jsonify({"error": "Not authenticated"}), 401
 
 @app.route("/logout", methods=["POST"])
 def logout():
     session.pop('user', None)
+    logout_user()
     return jsonify({"message": "Logged out successfully"}), 200
 
 @app.route("/candidate/cv-upload-api", methods=["POST"])
@@ -180,12 +163,10 @@ def add_cv():
     try:
         user_data = session.get('user')
         if not user_data:
-            print("No user in session")
             return jsonify({"error": "Not authenticated"}), 401
 
         cv_file = request.files.get("cv")
         if not cv_file:
-            print("No file in request")
             return jsonify({"error": "Missing cv"}), 400
 
         file_content = cv_file.read()
@@ -193,102 +174,69 @@ def add_cv():
 
         user_email = user_data.get('email')
         if not user_email:
-            print("No email in session data")
             return jsonify({"error": "Invalid session data"}), 401
 
-        print(f"Attempting to update CV for user: {user_email}")
-        print(f"File size: {len(file_content)} bytes")
+        result = db.users.update_one(
+            {"email": user_email},
+            {"$set": {"cv_pdf": binary_content}}
+        )
 
-        # First verify user exists
-        user = db.users.find_one({"email": user_email})
-        if not user:
-            print(f"User not found in database: {user_email}")
-            return jsonify({"error": "User not found"}), 404
-
-        # Try to update with detailed error logging
-        try:
-            result = db.users.update_one(
-                {"email": user_email},
-                {"$set": {"cv_pdf": binary_content}}
-            )
-            print(f"Update operation result: {result.raw_result}")
-            print(f"Modified count: {result.modified_count}")
-            print(f"Matched count: {result.matched_count}")
-            print(f"Upserted ID: {result.upserted_id}")
-            
-        except Exception as db_error:
-            print(f"Database operation error: {str(db_error)}")
-            print(f"Error type: {type(db_error)}")
-            return jsonify({"error": f"Database error: {str(db_error)}"}), 500
-
-        # Verify the update
-        updated_user = db.users.find_one({"email": user_email})
-        if "cv_pdf" in updated_user:
-            print("CV successfully stored in database")
+        if result.modified_count > 0:
             return jsonify({"message": "CV uploaded successfully"}), 200
         else:
-            print("CV not found in database after update")
-            return jsonify({"error": "Failed to verify CV upload"}), 500
-
+            return jsonify({"error": "Failed to update CV"}), 500
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
-        print(f"Error type: {type(e)}")
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
-@app.route("/employer/dashboard", methods=["POST"])
-def set_recruitment_pipeline():
-    documents = extract_user_cvs(db)
-    #input query instead of "recruitment pipeline"
-    rerank_cohere("Recruitment pipeline", documents)
-
-@app.route('/candidate/cv-delete', methods=['POST'])
-def delete_cv():
+############################################
+#          PROFILE MANAGEMENT
+############################################
+@app.route("/profile", methods=["GET"])
+def get_profile():
     user_data = session.get('user')
     if not user_data:
         return jsonify({"error": "Not authenticated"}), 401
+    profile = db.profiles.find_one({"email": user_data["email"]}, {"_id": 0})
+    if profile:
+        return jsonify(profile), 200
+    return jsonify({"error": "Profile not found"}), 404
 
-    user_email = user_data.get('email')
-    if not user_email:
-        return jsonify({"error": "Invalid session data"}), 401
+@app.route("/profile", methods=["PUT"])
+def update_profile():
+    user_data = session.get('user')
+    if not user_data:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    result = db.profiles.update_one(
+        {"email": user_data["email"]},
+        {"$set": data}
+    )
+    if result.modified_count > 0:
+        return jsonify({"message": "Profile updated successfully"}), 200
+    else:
+        return jsonify({"message": "No changes made"}), 200
 
-    try:
-        # First check if the user exists and has a CV
-        user = db.users.find_one({"email": user_email})
-        if not user:
-            print(f"User not found: {user_email}")
-            return jsonify({"error": "User not found"}), 404
-            
-        if "cv_pdf" not in user:
-            print(f"No CV found for user: {user_email}")
-            return jsonify({"error": "No CV found"}), 404
+############################################
+#          SIGNALING (SocketIO) for Calls
+############################################
+from flask_socketio import SocketIO, emit, join_room, leave_room
+socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://cvue.onrender.com"])
 
-        # Now try to delete the CV
-        result = db.users.update_one(
-            {"email": user_email},
-            {"$unset": {"cv_pdf": 1}}  # Use 1 instead of ""
-        )
-        
-        print(f"Delete operation result: {result.raw_result}")  # Debug print
-        
-        if result.modified_count > 0:
-            return jsonify({"message": "CV deleted successfully"}), 200
-        else:
-            print(f"No modifications made for user: {user_email}")
-            return jsonify({"error": "No changes made"}), 400
-            
-    except Exception as e:
-        print(f"Database error: {e}")
-        return jsonify({"error": f"Database error: {str(e)}"}), 500
+@socketio.on("join")
+def handle_join(data):
+    room = data.get("room")
+    join_room(room)
+    emit("status", {"msg": f"{session.get('user', {}).get('email', 'Unknown')} has joined the room."}, room=room)
 
-@app.route("/search-candidates", methods=["POST"])
-def search_candidates():
-    try:
-        data = request.get_json()
-        search_query = data.get('query')
-        
-        if not search_query:
-            return jsonify({"error": "No search query provided"}), 400
+@socketio.on("offer")
+def handle_offer(data):
+    room = data.get("room")
+    offer = data.get("offer")
+    emit("offer", {"offer": offer, "from": session.get('user', {}).get('email')}, room=room, include_self=False)
 
+<<<<<<< HEAD
         documents = extract_user_cvs(db)
         if not documents:
             return jsonify({"error": "No CVs found in the database"}), 404
@@ -381,3 +329,21 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     
     app.run(host="0.0.0.0", port=port, debug=False)
+=======
+@socketio.on("answer")
+def handle_answer(data):
+    room = data.get("room")
+    answer = data.get("answer")
+    emit("answer", {"answer": answer, "from": session.get('user', {}).get('email')}, room=room, include_self=False)
+
+@socketio.on("ice-candidate")
+def handle_ice_candidate(data):
+    room = data.get("room")
+    candidate = data.get("candidate")
+    emit("ice-candidate", {"candidate": candidate, "from": session.get('user', {}).get('email')}, room=room, include_self=False)
+
+# --- Main entry point ---
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
+>>>>>>> anis3

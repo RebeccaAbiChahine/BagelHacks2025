@@ -17,4 +17,7 @@ flask_login
 PyPDF2
 cohere
 Flask_Session
+flask_socketio
+gunicorn
+eventlet
 
