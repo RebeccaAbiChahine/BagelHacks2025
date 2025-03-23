@@ -54,11 +54,7 @@ export default function CVUploadPage() {
 
   const deleteCV = async (): Promise<void> => {
     try {
-<<<<<<< HEAD
-      const response = await fetch("http://localhost:10000/candidate/cv-delete", {
-=======
       const response = await fetch("https://cvuebackend.onrender.com/candidate/cv-delete", {
->>>>>>> anis3
         method: "POST",
         headers: {
           'Content-Type': 'application/json',
@@ -128,11 +124,7 @@ export default function CVUploadPage() {
     setUploadState("uploading");
 
     try {
-<<<<<<< HEAD
-      const response = await fetch("http://localhost:10000/candidate/cv-upload-api", {
-=======
       const response = await fetch("https://cvuebackend.onrender.com/candidate/cv-upload-api", {
->>>>>>> anis3
         method: "POST",
         body: formData,
         credentials: 'include',

@@ -1,9 +1,4 @@
-<<<<<<< HEAD
 from database import init_db, debug_print_user, extract_user_cvs
-=======
-# app.py
-from database import init_db, debug_print_user
->>>>>>> anis3
 import os
 from flask import Flask, request, jsonify, session, send_file
 from flask_cors import CORS
@@ -13,17 +8,11 @@ from flask_session import Session
 from datetime import timedelta
 import bcrypt
 from werkzeug.utils import secure_filename
-<<<<<<< HEAD
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from cohere_utils import rerank_cohere
 from models import User
 from parseFile import parse_pdf_to_text  # Add this import
 import io
-=======
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from models import User  # Your custom User model from models.py
-from cohere_utils import rerank_cohere  # Updated import for other features
->>>>>>> anis3
 
 # Load environment variables
 load_dotenv()
@@ -219,24 +208,15 @@ def update_profile():
         return jsonify({"message": "No changes made"}), 200
 
 ############################################
-#          SIGNALING (SocketIO) for Calls
+#              SEARCH ROUTES
 ############################################
-from flask_socketio import SocketIO, emit, join_room, leave_room
-socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://cvue.onrender.com"])
+@app.route("/employer/search", methods=["GET"])
+def search_candidates():
+    try:
+        search_query = request.args.get("q")
+        if not search_query:
+            return jsonify({"error": "No search query provided"}), 400
 
-@socketio.on("join")
-def handle_join(data):
-    room = data.get("room")
-    join_room(room)
-    emit("status", {"msg": f"{session.get('user', {}).get('email', 'Unknown')} has joined the room."}, room=room)
-
-@socketio.on("offer")
-def handle_offer(data):
-    room = data.get("room")
-    offer = data.get("offer")
-    emit("offer", {"offer": offer, "from": session.get('user', {}).get('email')}, room=room, include_self=False)
-
-<<<<<<< HEAD
         documents = extract_user_cvs(db)
         if not documents:
             return jsonify({"error": "No CVs found in the database"}), 404
@@ -251,8 +231,8 @@ def handle_offer(data):
                     "email": result["email"],
                     "firstName": user.get("first_name"),
                     "lastName": user.get("last_name"),
-                    "preview": result["text"][:200] + "...",  # First 200 characters of CV
-                    "text": result["text"],  # Include full text
+                    "preview": result["text"][:200] + "...",
+                    "text": result["text"],
                     "relevanceScore": result["relevance_score"]
                 })
 
@@ -324,12 +304,24 @@ def get_user_info():
         "accountType": user_data.get('account_type')
     }), 200
 
-if __name__ == "__main__":
-    # Use the PORT environment variable (default to 10000 if not set)
-    port = int(os.environ.get("PORT", 10000))
-    
-    app.run(host="0.0.0.0", port=port, debug=False)
-=======
+############################################
+#          SIGNALING (SocketIO) for Calls
+############################################
+from flask_socketio import SocketIO, emit, join_room, leave_room
+socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://cvue.onrender.com"])
+
+@socketio.on("join")
+def handle_join(data):
+    room = data.get("room")
+    join_room(room)
+    emit("status", {"msg": f"{session.get('user', {}).get('email', 'Unknown')} has joined the room."}, room=room)
+
+@socketio.on("offer")
+def handle_offer(data):
+    room = data.get("room")
+    offer = data.get("offer")
+    emit("offer", {"offer": offer, "from": session.get('user', {}).get('email')}, room=room, include_self=False)
+
 @socketio.on("answer")
 def handle_answer(data):
     room = data.get("room")
@@ -346,4 +338,3 @@ def handle_ice_candidate(data):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
->>>>>>> anis3
